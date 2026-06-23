@@ -1,0 +1,70 @@
+import json
+from tqdm import tqdm
+import pandas as pd
+from config import FULL_DATASET_PATH, OUTPUT_SUBMISSION_PATH, model
+from filters import is_valid_candidate, get_job_description_embedding
+from scoring import evaluate_candidates, cosine_similarity
+
+def run_pipeline():
+    valid_candidates = []
+    
+    print("Step 1: Streaming and filtering based on highly strict constraints...")
+    try:
+        with open(FULL_DATASET_PATH, 'r', encoding='utf-8') as f:
+            for line in tqdm(f, desc="Streaming Dataset Pool"):
+                line = line.strip()
+                if not line:
+                    continue
+                candidate = json.loads(line)
+                if is_valid_candidate(candidate):
+                    valid_candidates.append(candidate)
+    except FileNotFoundError:
+        print(f"Error: Raw file not found at {FULL_DATASET_PATH}. Please verify your data directory setup.")
+        return
+
+    print(f"\nSuccessfully compressed pool down to {len(valid_candidates)} premium target profiles!")
+    
+    if len(valid_candidates) > 0:
+        # Normalize target pool array into a clean DataFrame
+        df_filtered = pd.json_normalize(valid_candidates)
+        df_proc = evaluate_candidates(df_filtered)
+        
+        print("\nStep 2: Generating vector spatial mappings for the target subset pool...")
+        job_embedding = get_job_description_embedding()
+        texts = df_proc['combined_text'].tolist()
+        
+        # Generates mappings across the subset pool
+        embeddings = model.encode(texts, batch_size=32, show_progress_bar=True)
+        scores = cosine_similarity([job_embedding], embeddings)[0]
+        
+        df_proc['semantic_score'] = scores
+        
+        # Apply composite grading matrix formulas
+        df_proc['final_score'] = (
+            df_proc['semantic_score'] * df_proc['title_multiplier'] * 
+            df_proc['exp_score'] * df_proc['loc_score'] * df_proc['behavioral_multiplier']
+        )
+        
+        # Enforce alphanumeric tie-breaker validation rules
+        df_proc = df_proc.sort_values(by=['final_score', 'candidate_id'], ascending=[False, True]).reset_index(drop=True)
+        
+        # Extract the exact top 100 entries required by submission guidelines
+        df_top100 = df_proc.head(100).copy()
+        df_top100['rank'] = df_top100.index + 1
+        
+        df_top100['reasoning'] = df_top100.apply(
+            lambda r: f"AI Systems Engineer with {r['years_of_experience']} years of experience. Specialist in modern ML infrastructure. Current title: {r['current_title']}.", 
+            axis=1
+        )
+        
+        submission_format = df_top100[['candidate_id', 'rank', 'final_score', 'reasoning']].rename(columns={'final_score': 'score'})
+        submission_format.to_csv(OUTPUT_SUBMISSION_PATH, index=False)
+        
+        print(f"\n>>> Success! Official hackathon file created at: {OUTPUT_SUBMISSION_PATH} <<<")
+        print("\nPreview of your Top 5 Candidate Rankings:")
+        print(submission_format.head(5).to_string(index=False))
+    else:
+        print("Error: Pipeline execution array contains zero elements. Check filter ranges.")
+
+if __name__ == "__main__":
+    run_pipeline()

@@ -1,0 +1,31 @@
+from config import model, cosine_similarity
+
+def get_job_description_embedding():
+    """Defines target job criteria and pre-computes target vector."""
+    job_description = """
+    Looking for a Founding Senior AI Engineer with 5 to 9 years of experience.
+    Must specialize in embeddings, vector search, LLMs, fine-tuning, and RAG architectures.
+    Target locations: Noida or Pune, India. Relocation open.
+    """
+    return model.encode([job_description])[0]
+
+def is_valid_candidate(candidate):
+    """Applies strict deterministic constraints to filter candidate dictionary."""
+    # 1. Experience Check (Target: 5 to 9 years)
+    exp = candidate.get('years_of_experience', 0)
+    if not (5 <= exp <= 10):  # Buffer range allowed up to 10
+        return False
+        
+    # 2. Location Check (Target: Noida, Pune, or open to relocation)
+    loc = str(candidate.get('location', '')).lower()
+    relocate = candidate.get('open_to_relocation', False)
+    if not ('noida' in loc or 'pune' in loc or relocate):
+        return False
+        
+    # 3. Clear out non-technical keyword stuffers
+    title = str(candidate.get('current_title', '')).lower()
+    bad_keywords = ['marketing', 'sales', 'hr', 'recruiter', 'product manager']
+    if any(kw in title for kw in bad_keywords):
+        return False
+        
+    return True

@@ -1,0 +1,20 @@
+import os
+import pandas as pd
+import numpy as np
+from tqdm import tqdm
+from sentence_transformers import SentenceTransformer
+from sklearn.metrics.pairwise import cosine_similarity
+
+# Global Paths
+DATA_DIR = os.path.join(os.path.dirname(__file__), '..', 'data')
+RESULTS_DIR = os.path.join(os.path.dirname(__file__), '..', 'results')
+
+# Ensure directories exist
+os.makedirs(RESULTS_DIR, exist_ok=True)
+
+FULL_DATASET_PATH = os.path.join(DATA_DIR, 'candidates_100k.jsonl')  # Change filename if needed
+OUTPUT_SUBMISSION_PATH = os.path.join(RESULTS_DIR, 'team_ravi_submission.csv')
+
+# Initialize Shared Embedding Model
+print("Loading semantic transformer model...")
+model = SentenceTransformer('BAAI/bge-large-en-v1.5')
